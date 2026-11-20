@@ -1,0 +1,131 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="data:,">
+<title>Sunhaven Heat — an open-world crime game</title>
+<style>
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #0b0e14;
+    font-family: "Segoe UI", system-ui, -apple-system, sans-serif; color: #f2ede2; }
+  #stage { position: fixed; inset: 0; }
+  #stage canvas { display: block; }
+  /* Read aloud, never shown: the status line screen readers announce. */
+  #status { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+
+  #hud { position: fixed; inset: 0; pointer-events: none; z-index: 5; }
+  .panel { background: rgba(8, 12, 18, 0.72); border: 1px solid rgba(255,255,255,0.14);
+    border-radius: 10px; padding: 8px 12px; backdrop-filter: blur(2px); }
+  #top-left { position: absolute; top: 14px; left: 14px; display: flex; flex-direction: column; gap: 8px; }
+  #cash { font-size: 26px; font-weight: 800; color: #7ddf8a; letter-spacing: 0.5px; }
+  #health-bar { width: 180px; height: 12px; background: rgba(255,255,255,0.15); border-radius: 6px; overflow: hidden; }
+  #health-fill { height: 100%; width: 100%; background: #3aa655; transition: width 0.2s; }
+  #stars { font-size: 24px; letter-spacing: 4px; color: #8a93a3; }
+  #stars.hot { color: #ffd23b; text-shadow: 0 0 12px rgba(255, 210, 59, 0.8); }
+  #objective { position: absolute; top: 14px; left: 50%; transform: translateX(-50%);
+    font-size: 15px; font-weight: 600; text-align: center; max-width: 46vw; }
+  #objective::before { content: "◆ "; color: #ffd23b; }
+  #top-right { position: absolute; top: 14px; right: 14px; display: flex; flex-direction: column; align-items: flex-end; gap: 8px; }
+  #minimap { width: 190px; height: 190px; border-radius: 10px; border: 1px solid rgba(255,255,255,0.2); }
+  #speed { position: absolute; right: 18px; bottom: 18px; font-size: 30px; font-weight: 800; color: #fff;
+    text-shadow: 0 2px 8px rgba(0,0,0,0.7); }
+  #hint { position: absolute; left: 14px; bottom: 14px; font-size: 13px; opacity: 0.85; }
+  #toast { position: absolute; left: 50%; bottom: 110px; transform: translateX(-50%) translateY(8px);
+    font-size: 17px; font-weight: 700; background: rgba(8,12,18,0.82); border: 1px solid #ffd23b;
+    color: #ffd23b; padding: 10px 18px; border-radius: 10px; opacity: 0; transition: opacity 0.25s, transform 0.25s;
+    text-align: center; max-width: 70vw; }
+  #toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+  #crack { position: absolute; left: 50%; top: 64px; transform: translateX(-50%); width: 320px;
+    display: none; text-align: center; font-weight: 700; font-size: 14px; }
+  #crack.show { display: block; }
+  #crack-bar { height: 10px; background: rgba(255,255,255,0.15); border-radius: 5px; overflow: hidden; margin-top: 6px; }
+  #crack-fill { height: 100%; width: 0%; background: #ffd23b; }
+  #crosshair { position: absolute; left: 50%; top: 50%; width: 14px; height: 14px; margin: -7px 0 0 -7px;
+    display: none; }
+  #crosshair::before, #crosshair::after { content: ""; position: absolute; background: rgba(255,255,255,0.9);
+    box-shadow: 0 0 4px rgba(0,0,0,0.9); }
+  #crosshair::before { left: 6px; top: 0; width: 2px; height: 14px; }
+  #crosshair::after { left: 0; top: 6px; width: 14px; height: 2px; }
+
+  .screen { position: fixed; inset: 0; z-index: 10; display: none; align-items: center; justify-content: center;
+    background: rgba(5, 8, 14, 0.55); }
+  .screen.show { display: flex; }
+  .card { max-width: 620px; margin: 20px; padding: 34px 40px; text-align: center;
+    background: linear-gradient(160deg, rgba(16,22,34,0.94), rgba(40,26,12,0.94));
+    border: 1px solid rgba(255, 210, 59, 0.5); border-radius: 16px;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.6); }
+  .card h1 { margin: 0; font-size: 54px; letter-spacing: 4px; color: #ffd23b;
+    text-shadow: 0 4px 0 #b5502e, 0 8px 24px rgba(0,0,0,0.7); }
+  .card h2 { margin: 6px 0 0; font-size: 19px; font-weight: 600; color: #f2ede2; }
+  .card p { font-size: 15px; line-height: 1.55; color: #d8d2c4; }
+  .card ul { list-style: none; padding: 0; margin: 18px 0; display: grid; grid-template-columns: 1fr 1fr;
+    gap: 6px 18px; text-align: left; font-size: 13.5px; color: #cfc9ba; }
+  .card ul li::before { content: "▸ "; color: #ffd23b; }
+  .card button { pointer-events: auto; cursor: pointer; margin: 6px 4px 0; padding: 12px 26px;
+    font-size: 16px; font-weight: 700; border: none; border-radius: 10px;
+    background: #ffd23b; color: #201408; }
+  .card button.secondary { background: rgba(255,255,255,0.14); color: #f2ede2; border: 1px solid rgba(255,255,255,0.35); }
+  .card button:hover { filter: brightness(1.1); }
+  #over-title { font-size: 52px; color: #ff5a4e; text-shadow: 0 4px 0 #5a0e08, 0 8px 24px rgba(0,0,0,0.7); }
+</style>
+<script type="importmap">
+{
+  "imports": {
+    "three": "./vendor/three.module.min.js"
+  }
+}
+</script>
+</head>
+<body>
+<div id="stage"></div>
+
+<div id="hud">
+  <div id="top-left">
+    <div class="panel"><span id="cash">$0</span><div id="health-bar"><div id="health-fill"></div></div></div>
+    <div id="stars">☆☆☆☆☆</div>
+  </div>
+  <div id="objective" class="panel">Sunhaven Heat</div>
+  <div id="top-right">
+    <canvas id="minimap" width="190" height="190"></canvas>
+  </div>
+  <div id="speed"></div>
+  <div id="hint" class="panel">WASD move · E steal car · Click shoot</div>
+  <div id="toast"></div>
+  <div id="crack">Cracking the vault…<div id="crack-bar"><div id="crack-fill"></div></div></div>
+  <div id="crosshair"></div>
+</div>
+
+<div id="screen-title" class="screen">
+  <div class="card">
+    <h1 id="game-title">SUNHAVEN HEAT</h1>
+    <h2 id="game-tagline"></h2>
+    <p id="game-intro"></p>
+    <ul id="controls-list"></ul>
+    <button id="btn-new">New Game</button>
+    <button id="btn-continue" class="secondary">Continue</button>
+    <p style="font-size:12.5px; opacity:0.75;">An original open-world crime game. Sunhaven, Jax Marlowe and Vera are
+    fictional — no Rockstar / GTA names, characters, maps or assets.</p>
+  </div>
+</div>
+
+<div id="screen-pause" class="screen">
+  <div class="card">
+    <h1 style="font-size:40px;">PAUSED</h1>
+    <p>Sunhaven waits for no one — except right now.</p>
+    <button id="btn-resume">Resume</button>
+    <button id="btn-respawn" class="secondary">Respawn at garage</button>
+  </div>
+</div>
+
+<div id="screen-over" class="screen">
+  <div class="card">
+    <h1 id="over-title">BUSTED</h1>
+    <p id="over-text"></p>
+    <button id="btn-restart">Back on the streets</button>
+  </div>
+</div>
+
+<p id="status" role="status" aria-live="polite"></p>
+<script type="module" src="./src/main.js"></script>
+</body>
+</html>
